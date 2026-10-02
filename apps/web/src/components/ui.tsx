@@ -1,7 +1,7 @@
 'use client';
 import { t } from '@suraksha/shared';
 
-import { useState } from 'react';
+import { cloneElement, isValidElement, useId, useState } from 'react';
 import { readable } from '@suraksha/shared';
 import { Activity, FileText, Clock3, ShieldCheck } from 'lucide-react';
 export function Badge({ children, tone = '' }: { children: React.ReactNode; tone?: string }) {
@@ -55,7 +55,9 @@ export function Metrics({ items }: { items: [string, string | number][] }) {
             })()}
           </span>
           <div>
-            <strong>{value}</strong>
+            <strong className={String(value).length > 6 ? 'metric-text' : undefined}>
+              {value}
+            </strong>
             <small>{label}</small>
           </div>
         </div>
@@ -64,11 +66,12 @@ export function Metrics({ items }: { items: [string, string | number][] }) {
   );
 }
 export function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  const id = useId();
   return (
-    <label className="field">
-      <span>{label}</span>
-      {children}
-    </label>
+    <div className="field">
+      <label htmlFor={id}>{label}</label>
+      {isValidElement<{ id?: string }>(children) ? cloneElement(children, { id }) : children}
+    </div>
   );
 }
 export function State({
@@ -97,24 +100,29 @@ export function Action({
   onClick,
   secondary = false,
   danger = false,
+  disabled = false,
 }: {
   label: string;
   onClick: () => Promise<unknown>;
   secondary?: boolean;
   danger?: boolean;
+  disabled?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
   return (
     <>
       <button
         className={(secondary ? 'secondary ' : '') + (danger ? 'danger' : '')}
-        disabled={busy}
+        disabled={busy || disabled}
         onClick={async () => {
           setBusy(true);
           setError('');
+          setSuccess(false);
           try {
             await onClick();
+            setSuccess(true);
           } catch (e) {
             setError(e instanceof Error ? e.message : 'Action failed');
           } finally {
@@ -124,6 +132,11 @@ export function Action({
       >
         {busy ? 'Please wait…' : label}
       </button>
+      {success && (
+        <span className="action-success" role="status">
+          Saved successfully
+        </span>
+      )}
       {error && (
         <p className="error" role="alert">
           {error}
@@ -154,7 +167,9 @@ export function CaseTable({ rows, prefix }: { rows: any[]; prefix: string }) {
                 <small>{readable(r.category)}</small>
               </td>
               <td>
-                <Badge tone={r.priority === 'HIGH' ? 'red' : 'amber'}>{readable(r.priority)}</Badge>
+                <Badge tone={r.priority === 'HIGH' ? 'red' : r.priority === 'LOW' ? '' : 'amber'}>
+                  {readable(r.priority)}
+                </Badge>
               </td>
               <td>
                 <Badge>{readable(r.stage)}</Badge>
@@ -181,7 +196,12 @@ export function Tabs({
   return (
     <div className="tabs" role="group" aria-label={t('Filter')}>
       {options.map((x) => (
-        <button key={x} className={x === value ? 'selected' : ''} onClick={() => onChange(x)}>
+        <button
+          key={x}
+          aria-pressed={x === value}
+          className={x === value ? 'selected' : ''}
+          onClick={() => onChange(x)}
+        >
           {x}
         </button>
       ))}

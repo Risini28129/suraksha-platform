@@ -16,6 +16,8 @@ import {
   Trust,
   TrustBadges,
   IconCard,
+  Icon,
+  EmptyState,
   Stepper,
   colors,
   s,
@@ -29,6 +31,7 @@ export function SafetyScreen({ navigation: n, route }: ScreenProps) {
   const alert = useData(id === 'M14' && route.params?.id ? '/sos/' + route.params.id : null);
   const shares = useData<any[]>(id === 'M16' ? '/location/shares' : null);
   const [holding, setHolding] = useState(false);
+  const [sosRequestKey] = useState(() => Crypto.randomUUID());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -98,72 +101,154 @@ export function SafetyScreen({ navigation: n, route }: ScreenProps) {
       watcher?.remove();
     };
   }, [id, alert.data?.status, route.params?.id]);
-  if (id === 'M12')
+  if (id === 'M12') {
+    const hour = new Date().getHours();
+    const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+    const quickActions: [
+      string,
+      string,
+      string,
+      'scan' | 'file' | 'users' | 'pin' | 'message' | 'calendar',
+    ][] = [
+      ['Scan a message', 'Check concerning text', 'M21', 'scan'],
+      ['Start a report', 'Take the next step', 'M24', 'file'],
+      ['Trusted contacts', 'Your support circle', 'M15', 'users'],
+      ['Sharing location', 'On your terms', 'M16', 'pin'],
+      ['Community', 'You are not alone', 'M27', 'message'],
+      ['Book counseling', 'Make time for you', 'M31', 'calendar'],
+    ];
     return (
       <Page
-        title={'Good evening, ' + (session.user?.name.split(' ')[0] || 'you')}
-        tag="HOME"
-        meta="DASHBOARD"
-        subtitle={t('Here\u2019s your safety overview')}
+        title={`${greeting}, ${session.user?.name.split(' ')[0] || 'you'}`}
+        tag="YOUR DAILY SPACE"
+        subtitle="A little support. A safer day."
         nav
         navigation={n}
       >
         <State query={home} />
-        <Stepper step={3} total={5} />
+        <Card
+          style={{
+            backgroundColor: colors.navy,
+            borderColor: colors.navy,
+            padding: 24,
+            overflow: 'hidden',
+          }}
+        >
+          <View style={[s.row, { justifyContent: 'space-between', marginBottom: 20 }]}>
+            <Text style={{ color: '#c1d8f6', fontSize: 10, letterSpacing: 1.7, fontWeight: '700' }}>
+              HERE FOR YOU
+            </Text>
+            <Icon name="shield" size={32} color="#66dfb7" />
+          </View>
+          <Text
+            style={{
+              fontSize: 27,
+              fontWeight: '700',
+              color: 'white',
+              letterSpacing: -0.7,
+              lineHeight: 34,
+            }}
+          >
+            Your safety.{'\n'}Your space.
+          </Text>
+          <Text
+            style={{
+              color: '#c9dcf5',
+              fontSize: 13,
+              lineHeight: 21,
+              marginTop: 10,
+              marginBottom: 20,
+            }}
+          >
+            Keep what matters safe, find support and move forward at your own pace.
+          </Text>
+          <View style={[s.row, { borderTopWidth: 1, borderColor: '#ffffff26', paddingTop: 16 }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: 'white', fontSize: 22, fontWeight: '700' }}>
+                {home.data?.evidenceCount ?? '-'}
+              </Text>
+              <Text style={{ color: '#c9dcf5', fontSize: 11, marginTop: 4 }}>Vault items</Text>
+            </View>
+            <View style={{ width: 1, height: 32, backgroundColor: '#ffffff26' }} />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="My reports"
+              onPress={() => n.navigate('M26')}
+              style={{ flex: 1, paddingLeft: 12 }}
+            >
+              <Text style={{ color: 'white', fontSize: 22, fontWeight: '700' }}>
+                {home.data?.openReports ?? '-'}
+              </Text>
+              <Text style={{ color: '#c9dcf5', fontSize: 11, marginTop: 4 }}>Open reports</Text>
+            </Pressable>
+          </View>
+        </Card>
         <IconCard
-          title={t('SOS Emergency')}
-          detail={t('Tap and hold 2s to alert')}
-          icon="!"
+          title="SOS Emergency"
+          detail="Open, then hold for 2 seconds"
+          icon="sos"
           tone="sos"
           onPress={() => n.navigate('M13')}
         />
-        <IconCard
-          title={t('Evidence Vault')}
-          detail={`${home.data?.evidenceCount || 0} items`}
-          icon="▢"
-          onPress={() => n.navigate('M18')}
-        />
-        <IconCard
-          title={t('Ask Legal Aid')}
-          detail={t('AI chat')}
-          icon="♧"
-          onPress={() => n.navigate('M23')}
-        />
-        <IconCard
-          title={t('Check in')}
-          detail={t('Mood screen')}
-          icon="◎"
-          onPress={() => n.navigate('M29')}
-        />
-        <IconCard
-          title={t('Jobs')}
-          detail={t('Entry only · catalog not specified')}
-          icon="▣"
-          onPress={() =>
-            setError(
-              'Jobs and skills screens are not specified in the source. No employment service is available.',
-            )
-          }
-        />
-        {error && <Text style={s.muted}>{error}</Text>}
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 8 }}>
-          {[
-            ['Scan a message', 'M21'],
-            ['Start a report', 'M24'],
-            ['My reports', 'M26'],
-            ['Community', 'M27'],
-            ['Trusted contacts', 'M15'],
-            ['Sharing location', 'M16'],
-            ['Route home', 'M17'],
-          ].map(([label, screen]) => (
-            <Pressable key={screen} accessibilityRole="button" onPress={() => n.navigate(screen)}>
-              <Text style={s.link}>{label}</Text>
+        <Text style={s.section}>How can we help?</Text>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+          {quickActions.map(([label, detail, screen, icon]) => (
+            <Pressable
+              key={screen}
+              accessibilityRole="button"
+              accessibilityLabel={label}
+              onPress={() => n.navigate(screen)}
+              style={({ pressed }) => [
+                s.card,
+                {
+                  width: '48%',
+                  flexGrow: 1,
+                  flexBasis: '45%',
+                  marginBottom: 0,
+                  minHeight: 132,
+                  opacity: pressed ? 0.7 : 1,
+                },
+              ]}
+            >
+              <View
+                style={{
+                  backgroundColor: '#eaf1fc',
+                  padding: 10,
+                  borderRadius: 13,
+                  alignSelf: 'flex-start',
+                  marginBottom: 14,
+                }}
+              >
+                <Icon name={icon} size={21} />
+              </View>
+              <Text style={[s.text, { fontWeight: '700', fontSize: 14 }]}>{label}</Text>
+              <Text style={[s.muted, { marginTop: 3, fontSize: 11 }]}>{detail}</Text>
             </Pressable>
           ))}
         </View>
-        <Trust text="DEVELOPMENT SERVICES · NO REAL EMERGENCY DISPATCH" />
+        <Text style={s.section}>Make a little space for you</Text>
+        <IconCard
+          title="Check in"
+          detail="A private moment to reflect on how you feel"
+          icon="heart"
+          onPress={() => n.navigate('M29')}
+        />
+        <IconCard
+          title="Ask Legal Aid"
+          detail="Information and a connection to human support"
+          icon="book"
+          onPress={() => n.navigate('M23')}
+        />
+        <IconCard
+          title="Route home"
+          detail="Review location and reported areas"
+          icon="pin"
+          onPress={() => n.navigate('M17')}
+        />
+        <Trust text="PROTOTYPE | NO EMERGENCY DISPATCH CONNECTED" />
       </Page>
     );
+  }
   if (id === 'M13')
     return (
       <Page
@@ -200,6 +285,8 @@ export function SafetyScreen({ navigation: n, route }: ScreenProps) {
                 accessibilityLabel={t('Hold for two seconds to activate SOS')}
                 disabled={busy}
                 onPressIn={() => {
+                  if (timer.current || busy) return;
+                  setError('');
                   setHolding(true);
                   timer.current = setTimeout(async () => {
                     timer.current = null;
@@ -208,7 +295,7 @@ export function SafetyScreen({ navigation: n, route }: ScreenProps) {
                     try {
                       const location = await currentPosition();
                       const result = await api('/sos', 'POST', {
-                        idempotencyKey: Crypto.randomUUID(),
+                        idempotencyKey: sosRequestKey,
                         ...location,
                       });
                       n.replace('M14', { id: result.id });
@@ -250,7 +337,9 @@ export function SafetyScreen({ navigation: n, route }: ScreenProps) {
           </Text>
         )}
         <Text style={s.subtitle}>
-          {t('Alerts trusted contacts and nearest police unit with your live location.')}
+          {t(
+            'Hold for two seconds to record an SOS. Your location is included only when available.',
+          )}
         </Text>
         <Text style={[s.muted, { textAlign: 'center' }]}>
           {t(
@@ -259,6 +348,7 @@ export function SafetyScreen({ navigation: n, route }: ScreenProps) {
         </Text>
         <Button
           title={t('Cancel')}
+          disabled={busy}
           tone="outline"
           onPress={() => {
             if (timer.current) clearTimeout(timer.current);
@@ -271,10 +361,10 @@ export function SafetyScreen({ navigation: n, route }: ScreenProps) {
   if (id === 'M14')
     return (
       <Page
-        title={t('Help is on the way')}
+        title={t('Your SOS status')}
         tag="LIVE ALERT"
         meta="TRACKING"
-        subtitle={t('Live tracking active')}
+        subtitle={t('Follow the status of your recorded alert')}
       >
         <State query={alert} />
         <MapCard
@@ -282,7 +372,7 @@ export function SafetyScreen({ navigation: n, route }: ScreenProps) {
           longitude={alert.data?.locations[0]?.longitude}
         />
         <Card>
-          <Text style={s.text}>{t('Police unit notified')}</Text>
+          <Text style={s.text}>{t('Response status')}</Text>
           <Text style={s.muted}>
             {alert.data?.responderConfirmed
               ? t('Development responder joined')
@@ -291,7 +381,7 @@ export function SafetyScreen({ navigation: n, route }: ScreenProps) {
         </Card>
         <Card>
           <Text style={s.text}>
-            {(alert.data?.deliveries?.length || 0) + ' ' + t('contacts alerted')}
+            {(alert.data?.deliveries?.length || 0) + ' ' + t('contact delivery records')}
           </Text>
           {(alert.data?.deliveries || []).map((d: any) => (
             <Text key={d.id} style={s.muted}>
@@ -305,6 +395,8 @@ export function SafetyScreen({ navigation: n, route }: ScreenProps) {
         <Text style={s.badge}>{alert.data?.status}</Text>
         <Button
           title={t('\u2713 I am safe now')}
+          disabled={!alert.data || !['ACTIVE', 'RESPONDING'].includes(alert.data.status)}
+          successMessage="Your alert has been marked safe."
           onPress={async () => {
             await api('/sos/' + route.params.id + '/status', 'PATCH', { status: 'SAFE' });
             await alert.refetch();
@@ -352,16 +444,14 @@ export function SafetyScreen({ navigation: n, route }: ScreenProps) {
                   {c.phone}
                 </Text>
               </View>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={t('Remove')}
+              <Button
+                title={t('Remove')}
+                tone="outline"
                 onPress={async () => {
                   await api('/contacts/' + c.id, 'DELETE');
                   await contacts.refetch();
                 }}
-              >
-                <Text style={{ color: colors.red, fontSize: 18 }}>×</Text>
-              </Pressable>
+              />
             </View>
           </Card>
         ))}
@@ -393,8 +483,18 @@ export function SafetyScreen({ navigation: n, route }: ScreenProps) {
         <Button
           title={t('\uFF0B Add another contact')}
           tone="outline"
+          successMessage="Contact added to your support circle."
           onPress={async () => {
-            await api('/contacts', 'POST', form);
+            if (!form.name.trim() || !form.relationship.trim())
+              throw new Error('Enter a name and relationship.');
+            if (!/^\+?\d{9,15}$/.test(form.phone.trim()))
+              throw new Error('Enter a valid phone number with 9-15 digits.');
+            await api('/contacts', 'POST', {
+              ...form,
+              name: form.name.trim(),
+              relationship: form.relationship.trim(),
+              phone: form.phone.trim(),
+            });
             setForm({ name: '', relationship: '', phone: '', priority: false });
             await contacts.refetch();
           }}
@@ -412,6 +512,17 @@ export function SafetyScreen({ navigation: n, route }: ScreenProps) {
       >
         <MapCard latitude={position?.latitude} longitude={position?.longitude} />
         <State query={contacts} />
+        <State query={shares} />
+        {!contacts.isLoading && !contacts.error && !contacts.data?.length && (
+          <>
+            <EmptyState
+              title="Add someone you trust"
+              detail="Choose a trusted contact before sharing your location."
+              icon="users"
+            />
+            <Button title="Add trusted contacts" onPress={() => n.navigate('M15')} />
+          </>
+        )}
         {contacts.data?.map((c) => (
           <Card onPress={() => setShareContact(c.id)} key={c.id}>
             <Text style={s.text}>
@@ -423,6 +534,8 @@ export function SafetyScreen({ navigation: n, route }: ScreenProps) {
         ))}
         <Button
           title={t('Share for 2 hours')}
+          disabled={!shareContact}
+          successMessage="Location sharing started for two hours."
           onPress={async () => {
             const p = await currentPosition();
             if (!p.location || p.locationState !== 'AVAILABLE')
@@ -462,7 +575,11 @@ export function SafetyScreen({ navigation: n, route }: ScreenProps) {
       </Page>
     );
   return (
-    <Page title={t('Route home')} tag="SAFE ROUTE" subtitle={t('Avoiding reported danger zones')}>
+    <Page
+      title={t('Route home')}
+      tag="SAFE ROUTE"
+      subtitle={t('Review a route and reported locations')}
+    >
       <MapCard latitude={position?.latitude} longitude={position?.longitude} />
       <Input
         label={t('Destination latitude')}
@@ -480,6 +597,15 @@ export function SafetyScreen({ navigation: n, route }: ScreenProps) {
         title={t('Find route')}
         tone="blue"
         onPress={async () => {
+          if (
+            !destination.latitude.trim() ||
+            !destination.longitude.trim() ||
+            !Number.isFinite(Number(destination.latitude)) ||
+            !Number.isFinite(Number(destination.longitude)) ||
+            Math.abs(Number(destination.latitude)) > 90 ||
+            Math.abs(Number(destination.longitude)) > 180
+          )
+            throw new Error('Enter valid destination coordinates.');
           const p = await currentPosition();
           if (!p.location) throw new Error('Current GPS location unavailable');
           setPosition(p.location);
@@ -510,7 +636,7 @@ export function SafetyScreen({ navigation: n, route }: ScreenProps) {
             ))}
           </Card>
           <Button
-            title={navigating ? 'Stop navigation preview' : 'Start safe navigation'}
+            title={navigating ? 'Stop navigation preview' : 'View route preview'}
             tone="blue"
             onPress={() => setNavigating(!navigating)}
           />

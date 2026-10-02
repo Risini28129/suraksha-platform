@@ -6,6 +6,8 @@ import { api, useData } from '../lib/api';
 import { ScreenProps } from '../lib/context';
 import {
   Page,
+  Icon,
+  EmptyState,
   Card,
   Button,
   Choice,
@@ -65,10 +67,32 @@ export function ReportingScreen({ navigation: n, route }: ScreenProps) {
       <Page
         title={t('Legal Aid Chat')}
         tag="CONFIDENTIAL"
-        meta="24/7"
-        subtitle={t('Ask anything, anytime')}
+        meta="INFORMATION & SUPPORT"
+        subtitle={t('A private place to understand your options')}
       >
+        <Card style={{ backgroundColor: '#eaf1fc', borderColor: '#d6e4f7' }}>
+          <View style={s.row}>
+            <Icon name="book" size={27} />
+            <View style={{ flex: 1 }}>
+              <Text style={[s.text, { fontWeight: '700' }]}>One question at a time.</Text>
+              <Text style={s.muted}>
+                Ask for information, or choose to connect with a human advisor.
+              </Text>
+            </View>
+          </View>
+        </Card>
         <State query={query} />
+        {!queryId && <State query={queries} />}
+        {queryId && (
+          <Button
+            title="Start a new conversation"
+            tone="outline"
+            onPress={() => {
+              setQueryId(undefined);
+              setText('');
+            }}
+          />
+        )}
         {!queryId &&
           queries.data?.map((q) => (
             <Card key={q.id} onPress={() => setQueryId(q.id)}>
@@ -97,6 +121,7 @@ export function ReportingScreen({ navigation: n, route }: ScreenProps) {
         />
         <Button
           title={t('Send message')}
+          disabled={!text.trim()}
           onPress={async () => {
             if (queryId) {
               await api(`/legal/queries/${queryId}/messages`, 'POST', { body: text });
@@ -125,7 +150,7 @@ export function ReportingScreen({ navigation: n, route }: ScreenProps) {
             'Legal information is not representation. Human responses depend on advisor availability. No unrestricted AI legal advice is generated.',
           )}
         </Text>
-        <TrustBadges items={['CONFIDENTIAL', '24/7']} />
+        <TrustBadges items={['PRIVATE CONVERSATION', 'HUMAN SUPPORT']} />
       </Page>
     );
   if (id === 'M24')
@@ -137,7 +162,7 @@ export function ReportingScreen({ navigation: n, route }: ScreenProps) {
         subtitle={t('Choose the category that fits best')}
       >
         <Stepper step={1} total={3} label={t('Category')} />
-        {categories.map(([value, label, detail, icon]) => {
+        {categories.map(([value, label, detail]) => {
           const selected = category === value;
           return (
             <Pressable
@@ -151,7 +176,19 @@ export function ReportingScreen({ navigation: n, route }: ScreenProps) {
                 selected && { backgroundColor: '#e8faf2', borderColor: colors.green },
               ]}
             >
-              <Text style={{ fontSize: 22 }}>{icon}</Text>
+              <View style={{ padding: 12, backgroundColor: '#eaf1fc', borderRadius: 14 }}>
+                <Icon
+                  name={
+                    value === 'CYBER_HARASSMENT'
+                      ? 'scan'
+                      : value === 'DOMESTIC_VIOLENCE'
+                        ? 'home'
+                        : value === 'WORKPLACE_HARASSMENT'
+                          ? 'users'
+                          : 'pin'
+                  }
+                />
+              </View>
               <View style={{ flex: 1 }}>
                 <Text style={s.text}>{label}</Text>
                 <Text style={s.muted}>{detail}</Text>
@@ -233,7 +270,14 @@ export function ReportingScreen({ navigation: n, route }: ScreenProps) {
           tone="blue"
           onPress={async () => {
             const occurredAt = new Date(date);
-            if (!Number.isFinite(occurredAt.getTime())) throw new Error('Enter a valid date');
+            if (
+              !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+              !Number.isFinite(occurredAt.getTime()) ||
+              occurredAt.toISOString().slice(0, 10) !== date
+            )
+              throw new Error('Enter a valid date in YYYY-MM-DD format.');
+            if (occurredAt.getTime() > Date.now())
+              throw new Error('The incident date cannot be in the future.');
             let position:
               | { latitude: number; longitude: number; accuracy: number; capturedAt: string }
               | undefined;
@@ -274,7 +318,13 @@ export function ReportingScreen({ navigation: n, route }: ScreenProps) {
               <Text style={s.badge}>{readable(c.stage)}</Text>
             </Card>
           ))}
-          {!reports.data?.length && <Text style={s.muted}>{t('No reports submitted yet.')}</Text>}
+          {!reports.data?.length && !reports.isLoading && !reports.error && (
+            <EmptyState
+              title="Your reports live here"
+              detail="Track updates and stay in touch with your case officer after submitting a report."
+            />
+          )}
+          <Button title="Start a report" onPress={() => n.navigate('M24')} />
         </Page>
       );
     const currentStep = stageTimelineIndex(report.data?.stage);
@@ -290,7 +340,10 @@ export function ReportingScreen({ navigation: n, route }: ScreenProps) {
         <Card>
           {report.data?.events?.length
             ? report.data.events.map((event: any, i: number) => (
-                <View key={event.id} style={[s.row, { alignItems: 'flex-start', marginBottom: 12 }]}>
+                <View
+                  key={event.id}
+                  style={[s.row, { alignItems: 'flex-start', marginBottom: 12 }]}
+                >
                   <View style={{ alignItems: 'center' }}>
                     <View
                       style={{
@@ -340,6 +393,8 @@ export function ReportingScreen({ navigation: n, route }: ScreenProps) {
         <Input label={t('Your message')} value={message} onChange={setMessage} multiline />
         <Button
           title={t('Message case officer')}
+          disabled={!message.trim()}
+          successMessage="Message sent to your case."
           onPress={async () => {
             await api(`/cases/${route.params.reference}/messages`, 'POST', { body: message });
             setMessage('');
@@ -367,6 +422,8 @@ export function ReportingScreen({ navigation: n, route }: ScreenProps) {
         />
         <Button
           title={t('Submit for moderation')}
+          disabled={!text.trim()}
+          successMessage="Your post is saved for moderator review."
           onPress={async () => {
             await api('/community/posts', 'POST', { body: text });
             setText('');
@@ -374,6 +431,13 @@ export function ReportingScreen({ navigation: n, route }: ScreenProps) {
           }}
         />
         <State query={posts} />
+        {!posts.isLoading && !posts.error && !posts.data?.length && (
+          <EmptyState
+            title="A kinder space, together"
+            detail="Share a thought or an experience. Posts are reviewed before they appear publicly."
+            icon="message"
+          />
+        )}
         {posts.data?.map((p) => (
           <Card key={p.id}>
             <Text style={s.text}>{t('\u25CE Anonymous')}</Text>
@@ -404,6 +468,7 @@ export function ReportingScreen({ navigation: n, route }: ScreenProps) {
                 </View>
                 <Button
                   title={t('Report this post')}
+                  successMessage="A moderator will review this post."
                   tone="outline"
                   onPress={() =>
                     api('/community/flags', 'POST', {
@@ -430,6 +495,8 @@ export function ReportingScreen({ navigation: n, route }: ScreenProps) {
                     />
                     <Button
                       title={t('Submit comment')}
+                      disabled={!comment.trim()}
+                      successMessage="Comment submitted for review."
                       onPress={async () => {
                         await api('/community/posts/' + p.id + '/comments', 'POST', {
                           body: comment,
@@ -471,18 +538,21 @@ export function ReportingScreen({ navigation: n, route }: ScreenProps) {
           </Text>
         </Card>
       ))}
-      {!resources.data?.length && !resources.isLoading && (
+      {!resources.data?.length && !resources.isLoading && !resources.error && (
         <Card>
-          <Text style={s.text}>{t('Reviewed guides are not yet published.')}</Text>
+          <Text style={s.text}>
+            {search.trim() ? 'No guides match your search.' : 'New guidance is on its way.'}
+          </Text>
           <Text style={s.muted}>
             {t(
-              'Cyber Crimes Act, Domestic Violence Act, workplace protections and filing a police complaint are documented resource topics. Their reviewed source content has not been supplied.',
+              'Only reviewed guidance appears here. You can ask Legal Aid for information and human support.',
             )}
           </Text>
         </Card>
       )}
       {resource && (
         <Card>
+          <Button title="Close guide" tone="outline" onPress={() => setResource(null)} />
           <Text style={s.section}>{resource.title}</Text>
           <Text style={s.text}>{resource.body}</Text>
           <Text selectable style={s.muted}>

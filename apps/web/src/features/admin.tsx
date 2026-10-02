@@ -2,6 +2,7 @@
 import { t } from '@suraksha/shared';
 
 import { useState } from 'react';
+import { ArrowUpRight, ShieldCheck, Users, Sparkles } from 'lucide-react';
 import { api, useData } from '../lib/api';
 import {
   Title,
@@ -15,7 +16,7 @@ import {
   Action,
 } from '../components/ui';
 import { readable, percent } from '@suraksha/shared';
-export function AdminOverview() {
+export function AdminOverview({ name = 'Admin' }: { name?: string }) {
   const q = useData('/admin/overview');
   const [search, setSearch] = useState('');
   if (!q.data) return <State {...q} retry={q.reload} />;
@@ -34,19 +35,48 @@ export function AdminOverview() {
       readable(r.category).toLowerCase().includes(needle) ||
       (r.officer?.name || '').toLowerCase().includes(needle),
   );
-  const maxReports = Math.max(1, ...d.days.map((x: any) => x.reports));
-  const maxSos = Math.max(1, ...d.days.map((x: any) => x.sos));
+  const maxActivity = Math.max(1, ...d.days.flatMap((x: any) => [x.reports, x.sos]));
   return (
     <>
-      <Title title={t('Overview')} subtitle={t('Platform activity \u00B7 Suraksha Admin')}>
+      <Title
+        title={t('Overview')}
+        subtitle={t('A clear view of the people and reports that need you.')}
+      >
         <input
           className="search"
-          placeholder={t('Search staff, reports, IDs…')}
+          placeholder={t('Search recent reports or activity…')}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           aria-label={t('Search overview')}
         />
       </Title>
+      <section className="welcome-banner">
+        <div>
+          <span className="eyebrow">EVERY ACTION MAKES A DIFFERENCE</span>
+          <h2>
+            Welcome back, {name.split(' ')[0]}{' '}
+            <span className="welcome-spark" aria-hidden="true">
+              ✦
+            </span>
+          </h2>
+          <p>
+            Your community's safety starts with thoughtful care.
+            <br />
+            Let's make today a little safer, together.
+          </p>
+          <a className="button" href="/admin/reports">
+            Review reports <ArrowUpRight size={18} />
+          </a>
+        </div>
+        <div className="welcome-art" aria-hidden="true">
+          <div className="orbit orbit-one" />
+          <div className="orbit orbit-two" />
+          <ShieldCheck size={90} strokeWidth={1.2} />
+          <span className="art-pill">
+            <Users size={18} /> People first
+          </span>
+        </div>
+      </section>
       <Metrics
         items={[
           ['Total active users', d.users],
@@ -55,7 +85,13 @@ export function AdminOverview() {
           ['Accounts verified', percent(d.verified, d.users) + '%'],
         ]}
       />
-      <p className="muted">{d.provenance}</p>
+      <div className="section-heading">
+        <div>
+          <span className="eyebrow">YOUR PLATFORM AT A GLANCE</span>
+          <h2>Activity & updates</h2>
+        </div>
+        <span className="muted">Last 7 days · database records</span>
+      </div>
       <div className="two-col">
         <Card title={t('Weekly Activity')}>
           <div className="chart dual">
@@ -64,12 +100,12 @@ export function AdminOverview() {
                 <div className="bars">
                   <div
                     className="bar reports"
-                    style={{ height: Math.max(2, (x.reports / maxReports) * 150) }}
+                    style={{ height: Math.max(2, (x.reports / maxActivity) * 150) }}
                     title={`${x.reports} reports`}
                   />
                   <div
                     className="bar sos"
-                    style={{ height: Math.max(2, (x.sos / maxSos) * 150) }}
+                    style={{ height: Math.max(2, (x.sos / maxActivity) * 150) }}
                     title={`${x.sos} SOS`}
                   />
                 </div>
@@ -82,19 +118,50 @@ export function AdminOverview() {
             <span className="dot blue" /> {t('SOS')}
           </p>
         </Card>
-        <Card title={t('Live Feed')}>
-          <Badge tone="red">LIVE</Badge>
-          {events.map((x: any) => (
-            <div className="feed-item" key={x.id}>
-              <i />
-              {readable(x.action)}
-              <small>{new Date(x.createdAt).toLocaleTimeString()}</small>
-            </div>
-          ))}
+        <Card title={t('Recent activity')}>
+          <Badge>Latest recorded events</Badge>
+          <div className="feed-list">
+            {events.map((x: any) => (
+              <div className="feed-item" key={x.id}>
+                <i />
+                {readable(x.action)}
+                <small>{new Date(x.createdAt).toLocaleTimeString()}</small>
+              </div>
+            ))}
+          </div>
           <State empty={!events.length} />
         </Card>
       </div>
+      <div className="quick-links">
+        <a href="/admin/users">
+          <Users />
+          <div>
+            <strong>People & access</strong>
+            <small>Manage your support network</small>
+          </div>
+          <ArrowUpRight />
+        </a>
+        <a href="/admin/moderation">
+          <ShieldCheck />
+          <div>
+            <strong>A kinder community</strong>
+            <small>Review flagged content</small>
+          </div>
+          <ArrowUpRight />
+        </a>
+        <a href="/admin/settings/models">
+          <Sparkles />
+          <div>
+            <strong>Responsible AI</strong>
+            <small>Review models and audit activity</small>
+          </div>
+          <ArrowUpRight />
+        </a>
+      </div>
       <Card title={t('Recent Incidents')}>
+        <a className="section-link" href="/admin/reports">
+          View all reports →
+        </a>
         <CaseTable rows={incidents} prefix="/admin" />
       </Card>
     </>
@@ -114,6 +181,7 @@ export function UserManagement() {
   const q = useData<any[]>('/admin/users');
   const [tab, setTab] = useState('All users');
   const [show, setShow] = useState(false);
+  const [search, setSearch] = useState('');
   const [form, setForm] = useState({
     name: '',
     login: '',
@@ -121,11 +189,17 @@ export function UserManagement() {
     role: 'POLICE',
     jurisdiction: 'Colombo',
   });
-  const rows = (q.data || []).filter((u) => matchesUserTab(u, tab));
+  const rows = (q.data || []).filter(
+    (u) =>
+      matchesUserTab(u, tab) &&
+      `$<strong>{u.name}</strong> ${u.credentialId || ''} ${readable(u.role)}`
+        .toLowerCase()
+        .includes(search.toLowerCase()),
+  );
   return (
     <>
       <Title title={t('User Management')} subtitle={t('Accounts and professional verification')}>
-        <button onClick={() => setShow(!show)}>{t('\uFF0B Add User')}</button>
+        <button onClick={() => setShow(!show)}>{show ? 'Close form' : '+ Add staff member'}</button>
       </Title>
       <Metrics
         items={[
@@ -170,6 +244,18 @@ export function UserManagement() {
         </Card>
       )}
       <Card>
+        <div className="table-toolbar">
+          <div>
+            <h2>Your people</h2>
+            <p className="muted">{rows.length} accounts matching your view</p>
+          </div>
+          <input
+            aria-label="Search users"
+            placeholder="Search name, staff ID or role…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
         <Tabs
           options={[
             'All users',
@@ -203,9 +289,13 @@ export function UserManagement() {
                   </td>
                   <td>{readable(u.role)}</td>
                   <td>
-                    <Badge>{u.verified ? 'Verified' : 'Pending review'}</Badge>
+                    <Badge tone={u.verified ? '' : 'amber'}>
+                      {u.verified ? 'Verified' : 'Pending review'}
+                    </Badge>
                   </td>
-                  <td>{u.status}</td>
+                  <td>
+                    <Badge tone={u.status === 'ACTIVE' ? '' : 'red'}>{readable(u.status)}</Badge>
+                  </td>
                   <td className="actions">
                     <Action
                       secondary
@@ -231,6 +321,7 @@ export function UserManagement() {
             </tbody>
           </table>
         </div>
+        <State empty={!q.loading && !q.error && !rows.length} />
       </Card>
     </>
   );
@@ -272,6 +363,7 @@ export function Moderation() {
               <Badge tone="amber">{readable(x.source)}</Badge>
               <h3>{x.post ? 'Flagged post' : 'Flagged comment'}</h3>
               <p>{x.post?.body || x.comment?.body}</p>
+              <small>Submitted {new Date(x.createdAt).toLocaleDateString()}</small>
               <small>{x.reason}</small>
             </div>
             <div className="stack">
@@ -301,6 +393,7 @@ export function Moderation() {
 export function ModelMonitoring() {
   const q = useData<any[]>('/admin/models');
   const [detail, setDetail] = useState('');
+  const [modelId, setModelId] = useState('');
   return (
     <>
       <Title
@@ -318,31 +411,33 @@ export function ModelMonitoring() {
       <div className="two-col">
         <Card title={t('Model Performance')}>
           <State {...q} retry={q.reload} />
-          <table>
-            <thead>
-              <tr>
-                <th>{t('Model')}</th>
-                <th>{t('Accuracy')}</th>
-                <th>{t('Drift')}</th>
-                <th>{t('Provider')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {q.data?.map((m) => (
-                <tr key={m.id}>
-                  <td>
-                    {m.name}
-                    <small>{m.id}</small>
-                  </td>
-                  <td>{m.metrics.length ? 'See evaluation records' : 'No evaluation'}</td>
-                  <td>
-                    <Badge tone="amber">{readable(m.driftStatus)}</Badge>
-                  </td>
-                  <td>{m.provider}</td>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>{t('Model')}</th>
+                  <th>{t('Accuracy')}</th>
+                  <th>{t('Drift')}</th>
+                  <th>{t('Provider')}</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {q.data?.map((m) => (
+                  <tr key={m.id}>
+                    <td>
+                      {m.name}
+                      <small>{m.id}</small>
+                    </td>
+                    <td>{m.metrics.length ? 'See evaluation records' : 'No evaluation'}</td>
+                    <td>
+                      <Badge tone="amber">{readable(m.driftStatus)}</Badge>
+                    </td>
+                    <td>{m.provider}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </Card>
         <Card title={t('Sinhala / Tamil Coverage')}>
           {['English', 'Sinhala', 'Tamil'].map((x) => (
@@ -355,6 +450,18 @@ export function ModelMonitoring() {
         </Card>
       </div>
       <Card title={t('Recent Audit Activity')}>
+        <Field label="Model to review">
+          <select
+            value={modelId || q.data?.[0]?.id || ''}
+            onChange={(e) => setModelId(e.target.value)}
+          >
+            {q.data?.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+          </select>
+        </Field>
         {q.data
           ?.flatMap((m) => m.events)
           .map((e: any) => (
@@ -367,9 +474,10 @@ export function ModelMonitoring() {
         </Field>
         <Action
           label={t('Record retraining request')}
+          disabled={!q.data?.length || detail.trim().length < 5}
           onClick={async () => {
             await api('/admin/model-events', 'POST', {
-              modelId: q.data?.[0]?.id,
+              modelId: modelId || q.data?.[0]?.id,
               type: 'RETRAINING_REQUESTED',
               detail,
             });

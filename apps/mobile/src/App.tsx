@@ -2,14 +2,14 @@ import { t, setLocale } from '@suraksha/shared';
 import React, { useEffect, useState } from 'react';
 import { isDeviceInteraction, setDeviceRelock } from './lib/device-interaction';
 import { File, Paths } from 'expo-file-system';
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import type { SafeUser } from '@suraksha/types';
 import { SessionContext } from './lib/context';
-import { restoreSession } from './lib/api';
+import { restoreSession, setSessionExpiredHandler } from './lib/api';
 import { OnboardingScreen, DisguiseUtility } from './features/onboarding';
 import { SafetyScreen } from './features/safety';
 import { EvidenceScreen } from './features/evidence';
@@ -17,12 +17,15 @@ import { ReportingScreen } from './features/reporting';
 import { WellbeingScreen } from './features/wellbeing';
 import { State, Page } from './components/ui';
 const Stack = createNativeStackNavigator();
-const queryClient = new QueryClient();
+import { queryClient } from './lib/query-client';
 export default function App() {
   const [user, setUser] = useState<SafeUser | null>(null);
   const [locked, setLocked] = useState(true);
   const [ready, setReady] = useState(false);
   const [nic, setNic] = useState('');
+  useEffect(() => {
+    queryClient.clear();
+  }, [user?.id]);
   useEffect(() => {
     setLocale(user?.locale || 'en');
   }, [user?.locale]);
@@ -34,6 +37,11 @@ export default function App() {
     } catch {
       /* An unavailable OS cache must not prevent sign-in. */
     }
+    setSessionExpiredHandler(() => {
+      queryClient.clear();
+      setUser(null);
+      setLocked(true);
+    });
     restoreSession()
       .then(setUser)
       .catch(() => {})
@@ -50,11 +58,18 @@ export default function App() {
     });
     return () => {
       listener.remove();
+      setSessionExpiredHandler(() => {});
       setDeviceRelock(() => {});
     };
   }, []);
   return (
-    <SafeAreaProvider>
+    <SafeAreaProvider
+      style={
+        Platform.OS === 'web'
+          ? { flex: 1, width: '100%', maxWidth: 460, height: '100%', marginHorizontal: 'auto' }
+          : undefined
+      }
+    >
       <QueryClientProvider client={queryClient}>
         <SessionContext.Provider value={{ user, setUser, locked, setLocked, nic, setNic }}>
           {!ready ? (

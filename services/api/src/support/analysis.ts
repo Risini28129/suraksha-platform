@@ -1,5 +1,10 @@
+import { FileInterceptor } from '@nestjs/platform-express';
+import { recognizeScreenshot } from './ocr';
 import {
   Body,
+  BadRequestException,
+  UploadedFile,
+  UseInterceptors,
   Controller,
   Get,
   Inject,
@@ -21,6 +26,12 @@ export class AnalysisController {
     @Inject(Db) private db: Db,
     @Inject(EvidenceService) private evidence: EvidenceService,
   ) {}
+  @Post('ocr')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024, files: 1 } }))
+  async screenshot(@UploadedFile() file: Express.Multer.File) {
+    if (!file) throw new BadRequestException('Choose a screenshot');
+    return recognizeScreenshot(file.buffer);
+  }
   @Post() async analyze(@Req() r: AuthedRequest, @Body() body: unknown) {
     const input = parse(
       z.object({

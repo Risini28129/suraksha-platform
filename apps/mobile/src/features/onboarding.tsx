@@ -2,12 +2,13 @@ import { deviceNotifications } from '../providers/notifications';
 import { disguiseProvider } from '../providers/disguise';
 import { t } from '@suraksha/shared';
 import React, { useState } from 'react';
-import { Alert, Pressable, Switch, Text, View } from 'react-native';
+import { Pressable, Switch, Text, View } from 'react-native';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { api, saveSession, signOut } from '../lib/api';
 import { useSession, ScreenProps } from '../lib/context';
 import {
   Page,
+  Icon,
   Card,
   Button,
   Choice,
@@ -78,6 +79,7 @@ export function DisguiseUtility() {
   return (
     <Page
       title={disguise === 'calculator' ? 'Calculator' : disguise === 'notes' ? 'Notes' : 'Weather'}
+      discreet
     >
       <Pressable
         accessibilityLabel={t('Open private PIN entry')}
@@ -156,31 +158,117 @@ export function OnboardingScreen({ navigation: n, route }: ScreenProps) {
   const [disguise, setDisguise] = useState(session.user?.disguise || 'calculator');
   const [deleting, setDeleting] = useState(false);
   const [confirmation, setConfirmation] = useState('');
+  const [preferenceError, setPreferenceError] = useState('');
+  const [preferenceBusy, setPreferenceBusy] = useState(false);
   if (id === 'M01')
     return (
-      <Page title={t('')} tag="">
-        <View style={{ flex: 1, justifyContent: 'center', paddingTop: 40 }}>
-          <ShieldMark size={88} />
-          <Text style={s.title}>
-            {t('WELCOME TO')}
-            {'\n'}
-            {t('SURAKSHA')}
+      <Page title="" tag="WELCOME TO YOUR SAFE SPACE">
+        <View
+          style={{
+            backgroundColor: colors.navy,
+            borderRadius: 30,
+            padding: 28,
+            minHeight: 330,
+            justifyContent: 'center',
+            marginTop: 6,
+            marginBottom: 26,
+            overflow: 'hidden',
+          }}
+        >
+          <View
+            style={{
+              position: 'absolute',
+              width: 230,
+              height: 230,
+              borderWidth: 1,
+              borderColor: '#ffffff18',
+              borderRadius: 115,
+              right: -65,
+              top: -50,
+            }}
+          />
+          <View
+            style={{
+              position: 'absolute',
+              width: 290,
+              height: 290,
+              borderWidth: 1,
+              borderColor: '#ffffff12',
+              borderRadius: 145,
+              right: -95,
+              top: -80,
+            }}
+          />
+          <View
+            style={{
+              backgroundColor: '#ffffff14',
+              borderWidth: 1,
+              borderColor: '#ffffff22',
+              borderRadius: 24,
+              width: 92,
+              height: 92,
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: 34,
+            }}
+          >
+            <Icon name="shield" size={52} color="#5be0b0" />
+          </View>
+          <Text
+            style={{
+              color: 'white',
+              fontSize: 37,
+              fontWeight: '800',
+              lineHeight: 44,
+              letterSpacing: -1.2,
+            }}
+          >
+            You deserve{'\n'}to feel safe.
           </Text>
-          <Dots />
-          <Button title={t('GET STARTED \u276F')} onPress={() => n.navigate('M02')} />
+          <Text style={{ color: '#cbdcf3', fontSize: 14, lineHeight: 23, marginTop: 15 }}>
+            A private place to find support, protect your story and take your next step.
+          </Text>
         </View>
+        <Text style={[s.title, { fontSize: 25 }]}>Together, a little stronger.</Text>
+        <Text style={s.subtitle}>Safety, guidance and care. All in one place, at your pace.</Text>
+        <View style={[s.row, { marginBottom: 22 }]}>
+          {(
+            [
+              ['shield', 'Stay safe'],
+              ['lock', 'Keep it private'],
+              ['heart', 'Find support'],
+            ] as const
+          ).map(([icon, label]) => (
+            <View key={label} style={{ flex: 1, alignItems: 'center', gap: 9 }}>
+              <View
+                style={{
+                  backgroundColor: 'white',
+                  borderWidth: 1,
+                  borderColor: colors.line,
+                  borderRadius: 16,
+                  padding: 13,
+                }}
+              >
+                <Icon name={icon} color={colors.green} />
+              </View>
+              <Text style={[s.muted, { fontSize: 11 }]}>{label}</Text>
+            </View>
+          ))}
+        </View>
+        <Button title={t('GET STARTED \u276F')} onPress={() => n.navigate('M02')} />
+        <Trust text="YOUR CHOICE | YOUR PACE | YOUR SPACE" />
       </Page>
     );
   if (id === 'M02')
     return (
       <Page
-        title={t('Suraksha')}
+        title={t('Welcome back')}
         tag="SECURE LOGIN"
         meta="SAFETY NETWORK"
-        subtitle={t('GUARDIAN NETWORK \u00B7 MEMBER PORTAL')}
+        subtitle={t('Your private space is ready when you are.')}
       >
         <ShieldMark size={56} />
-        <Stepper step={3} total={5} label={t('Secure access')} />
+
         <SegmentedControl
           options={[t('Log In'), t('Register')]}
           value={register ? t('Register') : t('Log In')}
@@ -191,13 +279,6 @@ export function OnboardingScreen({ navigation: n, route }: ScreenProps) {
           icon="▣"
           value={form.login}
           onChange={(login) => setForm({ ...form, login })}
-        />
-        <Input
-          label={t('PHONE NUMBER')}
-          icon="☎"
-          value={form.phone}
-          onChange={(phone) => setForm({ ...form, phone })}
-          keyboardType="phone-pad"
         />
         {!register && (
           <Input
@@ -213,12 +294,16 @@ export function OnboardingScreen({ navigation: n, route }: ScreenProps) {
           title={t('Continue \u276F')}
           onPress={async () => {
             if (register) {
-              session.setNic(form.login);
+              if (!/^(?:\d{12}|\d{9}[vVxX])$/.test(form.login.trim()))
+                throw new Error('Enter a valid NIC: 12 digits, or 9 digits followed by V or X.');
+              session.setNic(form.login.trim());
               n.navigate('M03');
               return;
             }
+            if (!form.login.trim() || !form.password)
+              throw new Error('Enter your NIC and password to continue.');
             const result = await api('/auth/login', 'POST', {
-              login: form.login,
+              login: form.login.trim(),
               password: form.password,
             });
             if (result.user.role !== 'USER') throw new Error('Staff accounts use the web console');
@@ -229,7 +314,8 @@ export function OnboardingScreen({ navigation: n, route }: ScreenProps) {
         />
         <Pressable onPress={() => setRegister(true)}>
           <Text style={s.link}>
-            {t('New here?')} <Text style={{ color: colors.blue }}>{t('Register with your NIC')}</Text>{' '}
+            {t('New here?')}{' '}
+            <Text style={{ color: colors.blue }}>{t('Register with your NIC')}</Text>{' '}
             {t('in one step.')}
           </Text>
         </Pressable>
@@ -355,6 +441,7 @@ export function OnboardingScreen({ navigation: n, route }: ScreenProps) {
         <Button
           title={t('Create account')}
           onPress={async () => {
+            if (!consent) throw new Error('Please confirm the consent checkbox to continue.');
             const result = await api('/auth/register', 'POST', {
               name: form.name,
               phone: form.phone,
@@ -365,7 +452,9 @@ export function OnboardingScreen({ navigation: n, route }: ScreenProps) {
             await saveSession(result);
             session.setUser(result.user);
             session.setLocked(false);
-            await api('/me/preferences', 'PATCH', { locale: route.params?.locale || 'en' });
+            session.setUser(
+              await api('/me/preferences', 'PATCH', { locale: route.params?.locale || 'en' }),
+            );
           }}
         />
         <Button
@@ -403,18 +492,30 @@ export function OnboardingScreen({ navigation: n, route }: ScreenProps) {
               accessibilityLabel={t('Fingerprint unlock')}
               value={biometric}
               onValueChange={async (v) => {
-                if (v && !(await LocalAuthentication.hasHardwareAsync())) {
-                  Alert.alert('Biometrics unavailable');
-                  return;
+                try {
+                  if (v && !(await LocalAuthentication.hasHardwareAsync())) {
+                    setPreferenceError(
+                      'Biometric unlock requires a supported device with enrolled biometrics.',
+                    );
+                    return;
+                  }
+                  setBiometric(v);
+                } catch {
+                  setPreferenceError('Biometrics are unavailable on this device.');
                 }
-                setBiometric(v);
               }}
             />
           </View>
         </Card>
+        {!!preferenceError && (
+          <Text accessibilityRole="alert" style={s.error}>
+            {preferenceError}
+          </Text>
+        )}
         <Button
           title={t('Confirm PIN \u276F')}
           onPress={async () => {
+            if (!/^\d{6}$/.test(pin)) throw new Error('Enter all six PIN digits.');
             if (pin !== confirm) throw new Error('PINs do not match');
             await api('/me/security/pin', 'POST', { pin, ...(currentPin ? { currentPin } : {}) });
             await api('/me/preferences', 'PATCH', { biometricEnabled: biometric });
@@ -448,18 +549,16 @@ export function OnboardingScreen({ navigation: n, route }: ScreenProps) {
         <Button
           title={t('Set disguise \u276F')}
           onPress={async () => {
-            const native = await disguiseProvider.set(
-              disguise as 'calculator' | 'notes' | 'weather',
-            );
+            await disguiseProvider.set(disguise as 'calculator' | 'notes' | 'weather');
             const u = await api('/me/preferences', 'PATCH', { disguise });
-            if (!native.launcherChanged) Alert.alert('Disguise', native.notice);
+            // The capability notice remains visible on this screen.
             session.setUser(u);
             n.navigate('M15');
           }}
         />
         <Text style={s.muted}>
           {t(
-            'Internal disguise is available. Android launcher aliases require a native build; iOS launcher changes are not configured.',
+            'To open your private PIN entry, hold the calculator display or utility title for 1.5 seconds. Launcher icon changes require a supported native build.',
           )}
         </Text>
         <Trust />
@@ -480,12 +579,41 @@ export function OnboardingScreen({ navigation: n, route }: ScreenProps) {
         <Button
           title={t('Back to calculator')}
           tone="outline"
-          onPress={() => session.setLocked(true)}
+          onPress={() => {
+            if (session.user?.hasPin) session.setLocked(true);
+            else n.navigate('M08');
+          }}
         />
       </Page>
     );
   return (
-    <Page title={t('Settings')} tag="SETTINGS" nav navigation={n}>
+    <Page
+      title={t('Your profile')}
+      tag="SETTINGS"
+      subtitle="Make this space work for you."
+      nav
+      navigation={n}
+    >
+      <Card style={{ backgroundColor: colors.navy, borderColor: colors.navy }}>
+        <View style={s.row}>
+          <View style={{ padding: 14, backgroundColor: '#ffffff18', borderRadius: 18 }}>
+            <Icon name="shield" color="#5be0b0" size={30} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: 'white', fontSize: 20, fontWeight: '700' }}>
+              {session.user?.name}
+            </Text>
+            <Text style={{ color: '#cbdcf3', marginTop: 5, fontSize: 12 }}>
+              Your account, your control
+            </Text>
+          </View>
+        </View>
+      </Card>
+      {!!preferenceError && (
+        <Text accessibilityRole="alert" style={s.error}>
+          {preferenceError}
+        </Text>
+      )}
       <Card onPress={() => n.navigate('M03')}>
         <Text style={s.text}>{t('Language')}</Text>
         <Text style={s.muted}>{session.user?.locale}</Text>
@@ -507,15 +635,29 @@ export function OnboardingScreen({ navigation: n, route }: ScreenProps) {
           <Switch
             accessibilityLabel={t('Notifications')}
             value={session.user?.notificationsEnabled}
-            onValueChange={async (notificationsEnabled) =>
-              session.setUser(
-                await api('/me/preferences', 'PATCH', {
-                  notificationsEnabled: notificationsEnabled
-                    ? await deviceNotifications.requestPermission()
-                    : false,
-                }),
-              )
-            }
+            disabled={preferenceBusy}
+            onValueChange={async (notificationsEnabled) => {
+              setPreferenceBusy(true);
+              setPreferenceError('');
+              try {
+                const granted = notificationsEnabled
+                  ? await deviceNotifications.requestPermission()
+                  : false;
+                session.setUser(
+                  await api('/me/preferences', 'PATCH', { notificationsEnabled: granted }),
+                );
+                if (notificationsEnabled && !granted)
+                  setPreferenceError(
+                    'Notifications are not enabled. You can allow them in your device or browser settings.',
+                  );
+              } catch (e) {
+                setPreferenceError(
+                  e instanceof Error ? e.message : 'Unable to save notification preference',
+                );
+              } finally {
+                setPreferenceBusy(false);
+              }
+            }}
           />
         </View>
       </Card>
@@ -526,7 +668,10 @@ export function OnboardingScreen({ navigation: n, route }: ScreenProps) {
       <Button
         title={t('Lock and disguise')}
         tone="outline"
-        onPress={() => session.setLocked(true)}
+        onPress={() => {
+          if (session.user?.hasPin) session.setLocked(true);
+          else n.navigate('M08');
+        }}
       />
       <Button title={t('Delete my data')} tone="red" onPress={() => setDeleting(true)} />
       {deleting && (
@@ -543,6 +688,7 @@ export function OnboardingScreen({ navigation: n, route }: ScreenProps) {
           />
           <Button
             title={t('Delete everything')}
+            disabled={confirmation !== 'DELETE EVERYTHING'}
             tone="red"
             onPress={async () => {
               await api('/me', 'DELETE', { confirmation });

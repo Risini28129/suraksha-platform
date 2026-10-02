@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import './style.css';
+import './admin.css';
 export const metadata: Metadata = {
   title: 'Suraksha · Staff console',
   description: 'Suraksha shared response and support workspace',

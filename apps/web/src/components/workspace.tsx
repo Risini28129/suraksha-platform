@@ -144,7 +144,7 @@ export function Workspace({ path }: { path: string }) {
     else if (segments[1] === 'settings') content = <ModelMonitoring />;
     else if (segments[1] === 'cases') content = <CaseDetail reference={ref} role="ADMIN" />;
     else if (segments[1] === 'reports') content = <CaseList role="ADMIN" />;
-    else content = <AdminOverview />;
+    else content = <AdminOverview name={user.name} />;
   } else if (user.role === 'POLICE') {
     if (segments[1] === 'cases' && ref)
       content =
@@ -180,7 +180,10 @@ export function Workspace({ path }: { path: string }) {
       </main>
     );
   return (
-    <div className={'shell role-' + user.role}>
+    <div className={'shell staff-shell role-' + user.role}>
+      <a className="skip-link" href="#main-content">
+        Skip to content
+      </a>
       <aside className="sidebar">
         <a className="brand" href={roleHome[user.role]}>
           <ShieldCheck /> <span>{t('SURAKSHA')}</span>
@@ -190,14 +193,37 @@ export function Workspace({ path }: { path: string }) {
           {nav[user.role]?.map(([label, href, Icon]) => (
             <a
               key={href}
-              className={effective === href || effective.startsWith(href + '/') ? 'active' : ''}
+              className={
+                effective === href ||
+                (href !== roleHome[user.role] && effective.startsWith(href + '/')) ||
+                (href === '/admin/reports' && effective.startsWith('/admin/cases/'))
+                  ? 'active'
+                  : ''
+              }
+              aria-current={
+                effective === href ||
+                (href !== roleHome[user.role] && effective.startsWith(href + '/')) ||
+                (href === '/admin/reports' && effective.startsWith('/admin/cases/'))
+                  ? 'page'
+                  : undefined
+              }
               href={href}
             >
-              <Icon size={17} />
+              <Icon size={21} />
               {label}
             </a>
           ))}
         </nav>
+        {user.role === 'ADMIN' && (
+          <div className="sidebar-note">
+            <ShieldCheck size={28} />
+            <strong>Care begins with you.</strong>
+            <p>A safer community, one thoughtful action at a time.</p>
+            <a href="/admin/reports">
+              Review reports <span aria-hidden="true">→</span>
+            </a>
+          </div>
+        )}
         <footer>
           <span className="avatar">{user.name.charAt(0)}</span>
           <div>
@@ -219,7 +245,29 @@ export function Workspace({ path }: { path: string }) {
           </button>
         </footer>
       </aside>
-      <main className="workspace">
+      <main className="workspace" id="main-content">
+        {
+          <div className="admin-topbar">
+            <div>
+              <span className="eyebrow">SURAKSHA WORKSPACE</span>
+              <strong>Community care, connected.</strong>
+            </div>
+            <div className="topbar-account">
+              <span className="status-dot" /> {user.demo ? 'Demo workspace' : 'Staff workspace'}
+              <span className="avatar">{user.name.charAt(0)}</span>
+              <button
+                className="icon-button"
+                aria-label="Sign out of workspace"
+                onClick={async () => {
+                  await api('/auth/logout', 'POST');
+                  setUser(null);
+                }}
+              >
+                <LogOut size={19} />
+              </button>
+            </div>
+          </div>
+        }
         <div className="environment">
           <span>{t('RESEARCH PROTOTYPE')}</span>
           {t('Development delivery \u00B7 no emergency services connected')}
@@ -229,7 +277,7 @@ export function Workspace({ path }: { path: string }) {
             onChange={async (e) => {
               setUser(await api('/me/preferences', 'PATCH', { locale: e.target.value }));
             }}
-            style={{ width: 110, padding: 5, fontSize: 10 }}
+            style={{ width: 120 }}
           >
             <option value="en">English</option>
             <option value="si">සිංහල</option>

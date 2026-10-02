@@ -27,7 +27,9 @@
     "dev:ai": "node scripts/start-ai.mjs",
     "setup:env": "node scripts/setup-env.mjs",
     "test:mobile": "npm run test:mobile -w @suraksha/mobile",
-    "format:check": "prettier --check apps services/api packages tests scripts/*.mjs *.ts *.mjs *.json *.yml"
+    "format:check": "prettier --check apps services/api packages tests scripts/*.mjs *.ts *.mjs *.json *.yml",
+    "db:seed:admin": "node --env-file=.env node_modules/tsx/dist/cli.mjs --tsconfig services/api/tsconfig.json services/api/prisma/seed-admin-preview.ts",
+    "dev:mobile:web": "node scripts/run-mobile-web.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.57.0",

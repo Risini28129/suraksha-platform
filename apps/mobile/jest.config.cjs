@@ -1,5 +1,6 @@
 module.exports = {
   preset: 'jest-expo',
+  moduleNameMapper: { '^lucide-react-native$': require.resolve('lucide-react-native') },
   testMatch: ['**/*.test.tsx'],
   setupFilesAfterEnv: ['<rootDir>/test/setup.ts'],
   transformIgnorePatterns: [

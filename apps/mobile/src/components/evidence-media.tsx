@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Text, View } from 'react-native';
+import { Text, View, Platform } from 'react-native';
 import { File, Paths } from 'expo-file-system';
 import {
   useAudioRecorder,
@@ -79,7 +79,7 @@ function VideoPreview({ uri }: { uri: string }) {
       player={player}
       style={{ height: 260, width: '100%' }}
       nativeControls
-      allowsFullscreen={false}
+      fullscreenOptions={{ enable: false }}
     />
   );
 }
@@ -93,6 +93,13 @@ export function EvidenceMediaPreview({
   const [uri, setUri] = useState('');
   const [error, setError] = useState('');
   useEffect(() => {
+    setUri('');
+    setError('');
+    if (Platform.OS === 'web') {
+      const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: mediaType }));
+      setUri(url);
+      return () => URL.revokeObjectURL(url);
+    }
     // Playback engines need a local file. Keep it private/cache-only and erase on unmount/relock.
     const file = new File(
       Paths.cache,

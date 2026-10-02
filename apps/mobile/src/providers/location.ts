@@ -1,4 +1,5 @@
 import * as Location from 'expo-location';
+import { withDeviceInteraction } from '../lib/device-interaction';
 import type { Position } from '@suraksha/types';
 export interface LocationProvider {
   current(): Promise<{
@@ -8,13 +9,16 @@ export interface LocationProvider {
 }
 export const deviceLocation: LocationProvider = {
   async current() {
-    const permission = await Location.requestForegroundPermissionsAsync();
-    if (permission.status !== 'granted') return { locationState: 'DENIED' };
+    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
+      const permission = await withDeviceInteraction(() =>
+        Location.requestForegroundPermissionsAsync(),
+      );
+      if (permission.status !== 'granted') return { locationState: 'DENIED' };
       const p = await Promise.race([
         Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('GPS timeout')), 15000),
+        new Promise<never>(
+          (_, reject) => (timer = setTimeout(() => reject(new Error('GPS timeout')), 15000)),
         ),
       ]);
       return {
@@ -28,6 +32,8 @@ export const deviceLocation: LocationProvider = {
       };
     } catch {
       return { locationState: 'UNAVAILABLE' };
+    } finally {
+      if (timer) clearTimeout(timer);
     }
   },
 };

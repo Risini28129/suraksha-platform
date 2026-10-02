@@ -240,6 +240,11 @@ export class EvidenceController {
       z.object({
         kind: z.enum(['Photo', 'Audio', 'Video', 'Chat log', 'Analysis']).default('Photo'),
         note: z.string().max(2000).optional(),
+        filename: z
+          .string()
+          .max(255)
+          .regex(/^[^\/\\\x00-\x1f]+$/)
+          .optional(),
       }),
       body,
     );

@@ -29,7 +29,7 @@ class DevelopmentAnalyzer:
     def analyze(self, text: str, language: str) -> Analysis:
         normalized = preprocess(text)
         language = detect_script(normalized) if language == 'auto' else language
-        match = any(word in normalized.casefold() for word in ['blackmail', 'kill you', 'hurt you', 'regret this'])
+        match = any(word in normalized.casefold() for word in ['blackmail', 'kill you', 'hurt you', 'regret this', 'regret it', 'you will regret', 'you need to be regret'])
         return Analysis('DEVELOPMENT_FLAG' if match else 'UNASSESSED', 'REVIEW_REQUIRED', None, language,
                         'development-rules-v1', 'NON_VALIDATED_DEVELOPMENT',
                         'An illustrative English phrase matched. This is not validated threat detection.' if match else

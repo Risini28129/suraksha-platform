@@ -17,6 +17,35 @@ import {
 } from '../components/ui';
 import { readable } from '@suraksha/shared';
 import type { CaseView } from '@suraksha/types';
+function exportReports(rows: CaseView[]) {
+  const values = [
+    ['Reference', 'Category', 'Priority', 'Status', 'Handler'],
+    ...rows.map((r) => [
+      r.reference,
+      readable(r.category),
+      r.priority,
+      r.stage,
+      r.officer?.name || 'Unassigned',
+    ]),
+  ];
+  const csv = values
+    .map((row) =>
+      row
+        .map((value) => {
+          const safe = /^[=+@\-\t\r]/.test(value) ? "'" + value : value;
+          return '"' + safe.replaceAll('"', '""') + '"';
+        })
+        .join(','),
+    )
+    .join('\r\n');
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = 'suraksha-reports.csv';
+  anchor.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 function isToday(iso: string) {
   return new Date(iso).toDateString() === new Date().toDateString();
 }
@@ -52,13 +81,22 @@ export function CaseList({ role }: { role: 'ADMIN' | 'POLICE' }) {
           (tab === 'Unassigned' && !r.officer) ||
           (tab === 'Escalated' && r.escalated) ||
           readable(r.stage) === tab) &&
-      `${r.reference} ${r.category}`.toLowerCase().includes(search.toLowerCase()),
+      `${r.reference} ${readable(r.category)} ${r.officer?.name || ''}`
+        .toLowerCase()
+        .includes(search.toLowerCase()),
   );
   const resolvedToday =
-    q.data?.filter((r) => r.stage === 'RESOLVED' && isToday(r.createdAt)).length || 0;
+    q.data?.filter(
+      (r) =>
+        r.stage === 'RESOLVED' &&
+        r.events?.some((e) => ['RESOLVE', 'RESOLVED'].includes(e.type) && isToday(e.createdAt)),
+    ).length || 0;
   return (
     <>
-      <Title title={role === 'ADMIN' ? 'Reports Queue' : 'Assigned Cases'}>
+      <Title
+        title={role === 'ADMIN' ? 'Reports Queue' : 'Assigned Cases'}
+        subtitle="Review, assign and follow every report through to resolution."
+      >
         <input
           aria-label={t('Search cases')}
           placeholder={t('Search report ID, category\u2026')}
@@ -80,11 +118,16 @@ export function CaseList({ role }: { role: 'ADMIN' | 'POLICE' }) {
         ]}
       />
       <Card>
-        <Tabs
-          options={role === 'ADMIN' ? adminTabs : policeTabs}
-          value={tab}
-          onChange={setTab}
-        />
+        <div className="table-toolbar">
+          <div>
+            <h2>All incident reports</h2>
+            <p className="muted">{rows.length} reports in this view</p>
+          </div>
+          <button className="secondary" onClick={() => exportReports(rows)}>
+            Export CSV
+          </button>
+        </div>
+        <Tabs options={role === 'ADMIN' ? adminTabs : policeTabs} value={tab} onChange={setTab} />
         <State {...q} retry={q.reload} />
         <CaseTable rows={rows} prefix={role === 'ADMIN' ? '/admin' : '/police'} />
       </Card>
@@ -95,15 +138,21 @@ export function CaseDetail({ reference, role }: { reference: string; role: 'ADMI
   const q = useData<CaseView>('/cases/' + reference);
   const users = useData<any[]>(role === 'ADMIN' ? '/admin/users' : null);
   const [officer, setOfficer] = useState('');
+  const [mutationBusy, setMutationBusy] = useState(false);
   const [note, setNote] = useState('');
   const [message, setMessage] = useState('');
   const messages = useData<any[]>(role === 'POLICE' ? `/cases/${reference}/messages` : null);
   if (!q.data) return <State {...q} retry={q.reload} />;
   const c = q.data;
   const action = async (type: string) => {
-    await api(`/cases/${reference}/actions`, 'POST', { type, note, expectedVersion: c.version });
-    setNote('');
-    await q.reload();
+    setMutationBusy(true);
+    try {
+      await api(`/cases/${reference}/actions`, 'POST', { type, note, expectedVersion: c.version });
+      setNote('');
+      await q.reload();
+    } finally {
+      setMutationBusy(false);
+    }
   };
   return (
     <>
@@ -231,12 +280,18 @@ export function CaseDetail({ reference, role }: { reference: string; role: 'ADMI
                 </Field>
                 <Action
                   label={t('Assign to Police')}
+                  disabled={mutationBusy || !officer || c.stage === 'RESOLVED'}
                   onClick={async () => {
-                    await api(`/cases/${reference}/assignment`, 'POST', {
-                      officerId: officer,
-                      expectedVersion: c.version,
-                    });
-                    await q.reload();
+                    setMutationBusy(true);
+                    try {
+                      await api(`/cases/${reference}/assignment`, 'POST', {
+                        officerId: officer,
+                        expectedVersion: c.version,
+                      });
+                      await q.reload();
+                    } finally {
+                      setMutationBusy(false);
+                    }
                   }}
                 />
               </>
@@ -249,18 +304,29 @@ export function CaseDetail({ reference, role }: { reference: string; role: 'ADMI
               <textarea value={note} onChange={(e) => setNote(e.target.value)} />
             </Field>
             <div className="stack">
-              <Action secondary label={t('Save note')} onClick={() => action('INTERNAL_NOTE')} />
               <Action
                 secondary
+                disabled={mutationBusy || !note.trim()}
+                label={t('Save note')}
+                onClick={() => action('INTERNAL_NOTE')}
+              />
+              <Action
+                secondary
+                disabled={mutationBusy}
                 label={role === 'ADMIN' ? 'Request more info' : 'Request additional evidence'}
                 onClick={() => action('REQUEST_INFO')}
               />
               {role === 'ADMIN' && (
-                <Action label={t('Mark as resolved')} onClick={() => action('RESOLVE')} />
+                <Action
+                  disabled={mutationBusy || c.stage === 'RESOLVED'}
+                  label={t('Mark as resolved')}
+                  onClick={() => action('RESOLVE')}
+                />
               )}
               <Action
                 secondary
                 danger
+                disabled={mutationBusy || c.escalated}
                 label={role === 'ADMIN' ? 'Escalate immediately' : 'Escalate to CID'}
                 onClick={() => action('ESCALATE')}
               />
@@ -298,9 +364,7 @@ export function CaseStatus({ reference }: { reference: string }) {
               key={x}
               type="button"
               className={
-                'stage-step' +
-                (current === x ? ' active' : '') +
-                (i < currentIndex ? ' done' : '')
+                'stage-step' + (current === x ? ' active' : '') + (i < currentIndex ? ' done' : '')
               }
               onClick={() => setStage(x)}
             >

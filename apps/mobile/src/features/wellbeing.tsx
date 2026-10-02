@@ -3,12 +3,23 @@ import React, { useState } from 'react';
 import { Text, View, Pressable } from 'react-native';
 import { api, useData } from '../lib/api';
 import { ScreenProps } from '../lib/context';
-import { Page, Card, Button, Choice, Input, State, TrustBadges, colors, s } from '../components/ui';
+import {
+  Page,
+  Icon,
+  EmptyState,
+  Card,
+  Button,
+  Choice,
+  Input,
+  State,
+  TrustBadges,
+  colors,
+  s,
+} from '../components/ui';
 export function WellbeingScreen({ navigation: n, route }: ScreenProps) {
   const id = route.name;
   const [answer, setAnswer] = useState('Several days');
   const [slot, setSlot] = useState('');
-  const [shared, setShared] = useState(false);
   const [appointment, setAppointment] = useState<any>(null);
   const [body, setBody] = useState('');
   const result = useData(
@@ -40,15 +51,19 @@ export function WellbeingScreen({ navigation: n, route }: ScreenProps) {
         >
           <View style={{ width: '100%', height: '100%', backgroundColor: colors.green }} />
         </View>
-        <Text style={s.muted}>
-          {t('Documented prompt \u00B7 full screening instrument not configured')}
-        </Text>
+        <Card style={{ backgroundColor: '#e8faf2', borderColor: '#ccebdc' }}>
+          <Icon name="heart" color={colors.green} size={32} />
+          <Text style={[s.section, { marginTop: 12 }]}>Take a breath. Check in.</Text>
+          <Text style={s.text}>
+            There is no right or wrong answer. Choose what feels closest to your week.
+          </Text>
+        </Card>
         <Text style={s.section}>{t('I have felt tense or on edge this week')}</Text>
         {['Not at all', 'Several days', 'More than half the days', 'Nearly every day'].map((x) => (
           <Choice key={x} label={x} selected={answer === x} onPress={() => setAnswer(x)} />
         ))}
         <Button
-          title={t('Next >')}
+          title={t('Save my check-in')}
           tone="blue"
           onPress={async () => {
             const item = await api('/wellbeing/check-ins', 'POST', { answer, shared: false });
@@ -67,7 +82,7 @@ export function WellbeingScreen({ navigation: n, route }: ScreenProps) {
     return (
       <Page
         title={t('Your check-in result')}
-        tag="SCREENING COMPLETE"
+        tag="CHECK-IN COMPLETE"
         subtitle={t('Your private wellbeing record')}
       >
         <State query={result} />
@@ -78,11 +93,11 @@ export function WellbeingScreen({ navigation: n, route }: ScreenProps) {
         </Card>
         <Choice
           label={t('Share this check-in with my assigned counselor')}
-          selected={shared || result.data?.shared === true}
+          selected={result.data?.shared === true}
           onPress={async () => {
-            const next = !(shared || result.data?.shared === true);
+            if (!result.data) throw new Error('Wait for your check-in to load.');
+            const next = !result.data.shared;
             await api('/wellbeing/check-ins/' + route.params.id, 'PATCH', { shared: next });
-            setShared(next);
             await result.refetch();
           }}
         />
@@ -95,7 +110,9 @@ export function WellbeingScreen({ navigation: n, route }: ScreenProps) {
             'You can check in again in two weeks. There is no automatic diagnosis or clinical severity score.',
           )}
         </Text>
-        <TrustBadges items={['PRIVATE RESULTS', 'NOT SHARED']} />
+        <TrustBadges
+          items={['PRIVATE RESULTS', result.data?.shared ? 'SHARED BY YOU' : 'NOT SHARED']}
+        />
       </Page>
     );
   return (
@@ -114,11 +131,16 @@ export function WellbeingScreen({ navigation: n, route }: ScreenProps) {
           onPress={() => setSlot(x.id)}
         />
       ))}
-      {!slots.data?.length && !slots.isLoading && (
-        <Text style={s.muted}>{t('No counselor slots are currently available.')}</Text>
+      {!slots.data?.length && !slots.isLoading && !slots.error && (
+        <EmptyState
+          title="No times available yet"
+          detail="Check back for new appointments. Your existing sessions are listed below."
+          icon="calendar"
+        />
       )}
       <Button
         title={t('Confirm booking \u2713')}
+        successMessage="Your appointment is confirmed."
         disabled={!slot}
         onPress={async () => {
           const a = await api('/counseling/appointments', 'POST', {
@@ -126,6 +148,7 @@ export function WellbeingScreen({ navigation: n, route }: ScreenProps) {
             modality: 'CHAT',
           });
           setAppointment(a);
+          setSlot('');
           await slots.refetch();
           await appointments.refetch();
         }}
@@ -137,6 +160,10 @@ export function WellbeingScreen({ navigation: n, route }: ScreenProps) {
         </Card>
       )}
       <Text style={s.section}>{t('Your sessions')}</Text>
+      <State query={appointments} />
+      {!appointments.isLoading && !appointments.error && !appointments.data?.length && (
+        <Text style={s.muted}>Your appointments will appear here after booking.</Text>
+      )}
       {appointments.data?.map((a) => (
         <Card key={a.id} onPress={() => setAppointment(a)}>
           <Text style={s.text}>{new Date(a.startsAt).toLocaleString()}</Text>
@@ -146,6 +173,7 @@ export function WellbeingScreen({ navigation: n, route }: ScreenProps) {
       {appointment && (
         <>
           <Text style={s.section}>{t('Secure session messages')}</Text>
+          <State query={messages} />
           {messages.data?.map((m) => (
             <Text key={m.id} style={s.text}>
               {m.role}
@@ -156,6 +184,8 @@ export function WellbeingScreen({ navigation: n, route }: ScreenProps) {
           <Input label={t('Message your counselor')} value={body} onChange={setBody} multiline />
           <Button
             title={t('Send')}
+            disabled={!body.trim()}
+            successMessage="Message sent."
             onPress={async () => {
               await api(`/counseling/sessions/${appointment.id}/messages`, 'POST', { body });
               setBody('');
